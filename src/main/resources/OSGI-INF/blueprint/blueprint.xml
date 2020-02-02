@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<blueprint xmlns="http://www.osgi.org/xmlns/blueprint/v1.0.0"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+	   xmlns:cm="http://aries.apache.org/blueprint/xmlns/blueprint-cm/v1.1.0"
+	   xsi:schemaLocation=" 
+	                        http://www.osgi.org/xmlns/blueprint/v1.0.0 https://www.osgi.org/xmlns/blueprint/v1.0.0/blueprint.xsd   
+	                        http://camel.apache.org/schema/blueprint http://camel.apache.org/schema/blueprint/camel-blueprint.xsd
+				http://aries.apache.org/blueprint/xmlns/blueprint-cm/v1.1.0 http://aries.apache.org/schemas/blueprint-cm/blueprint-cm-1.1.0.xsd" >
+
+				
+				<cm:property-placeholder id="cfg2" persistent-id="apidb" update-strategy="reload">
+					<cm:default-properties>
+						<cm:property name="host" value="localhost"/>
+						<cm:property name="apiport" value="8081"/>
+						<cm:property name="CronTime" value="0+1+*+?+*+*"/>
+						<cm:property name="MyFileLocation" value="/home/prasoon/Cloudcherry"/>
+					</cm:default-properties>
+				</cm:property-placeholder>
+				
+	   <bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource"
+		destroy-method="close">
+		<property name="driverClassName" value="com.mysql.jdbc.Driver" />
+		<property name="url" value="jdbc:mysql://192.168.122.127/prasoon" />
+		<property name="username" value="root" />
+		<property name="password" value="redhat" />
+
+	</bean>
+
+
+	<!--<bean id="quartz" class="org.apache.camel.component.quartz.QuartzComponent">
+       <property name="startDelayedSeconds" value="5"/>
+       </bean>-->
+
+
+     
+              <camelContext id="api-db" xmlns="http://camel.apache.org/schema/blueprint" streamCache="true">
+	      
+	      <dataFormats>
+	      <json id="jsonOrder" library="Jackson" useList="true"/>
+	      </dataFormats>
+
+            <!--   <dataFormats>
+                     <bindy id="bindyDataformat" type="Csv" classType="org.apache.camel.bindy.model.Order"/>
+	    </dataFormats> -->
+
+  
+	    <route id="CSV-DB">
+		        <from uri="timer:GetPrasoonDetail?period=10000"/>
+	    <setHeader headerName="ExchangeId"><simple>${exchangeId}</simple></setHeader>
+		    
+            <doTry>
+	    			    
+	    <log id="_log1" message="The Scheduler Stated at  ${date:now:yyyy-MM-dd HH:mm:ss}  ExchangeID=${header.ExchangeId}"/> 
+	    <!--<setHeader headerName="myHead"><simple>${date:now:yyyy-MM-dd HH:mm:ss}</simple></setHeader>--> 
+
+
+	    
+	   <setHeader headerName="CamelFileName"><simple>${date:now:yyyy-MM-dd-HH-mm}</simple></setHeader>
+                        <setBody><simple>EmployeeID,FirstName,LastName,Email,AddressLine,City\n</simple></setBody>
+			<to uri="file:{{MyFileLocation}}?fileName=${header.CamelFileName}.csv"/>
+
+	    <setBody><simple>select * from Employee</simple></setBody>
+	   
+	  
+	    <to id="_to4" uri="jdbc:dataSource"/>
+
+	   <log message="Details are as  ${body}"/>
+
+                                   <split>
+                                      <simple>${body}</simple>
+	                           <log message="Details are as  ${body}"/>
+				      <setBody><simple>${body[EmployeeID]},${body[FirstName]},${body[LastName]},${body[Email]},${body[Addressline]},${body[City]}\n</simple></setBody>
+				      <to uri="file://{{MyFileLocation}}?fileName=${header.CamelFileName}.csv&amp;fileExist=append"/>
+			      </split>
+                
+
+	    
+    <doCatch>
+   <exception>java.lang.Exception</exception>
+   <log message="Service Exception ${exception.message} at ${date:now:yyyy-MM-dd'T'HH:mm:ss:SSS}****"/>
+    <setHeader headerName="Exception">  <simple> {"message":"Body Can't Be Null"} </simple>  </setHeader>
+    <setHeader headerName="Content-Type"><simple>application/json</simple></setHeader>
+    <setBody><simple> ${header.Exception}</simple> </setBody>
+	          <!-- <setBody><simple>{"error":"${exception.message}"}</simple> </setBody> -->
+		     <marshal ref="jsonOrder"/>
+	          <setHeader headerName="CamelRestletResponse"><simple>${body}</simple></setHeader>
+	          
+ 	</doCatch> 
+
+   	                  <doCatch>
+                         	<exception>java.lang.NullPointerException</exception>
+	                 	<log message="Database  exception ${exception.message} at ${date:now:yyyy-MM-dd'T'HH:mm:ss:SSS}"/>
+		                <setHeader headerName="Exception"><simple>{"message":"Error in Database"}</simple></setHeader>
+                            	<setHeader headerName="Content-Type"><simple>application/json</simple></setHeader>
+				<setBody><simple>{"error":"The TCP/IP connection of db has been failed"}</simple></setBody>
+				<marshal ref="jsonOrder"/>
+                            	<setHeader headerName="CamelRestletResponse"><simple>${body}</simple></setHeader>
+                    	</doCatch> 
+ 	
+		</doTry> 
+  	
+ 
+
+
+
+
+		<!--  <from uri="timer:foo?period=10000"/>
+  <setBody><simple>select * from Employee</simple></setBody>
+  <to uri="jdbc:dataSource"/>
+  <to uri="bean:ngtrend.afbl2afc.transformer?method=tocsv(myname)"/>
+  <log message="${body}"/> -->
+
+
+
+        </route>
+    </camelContext>
+</blueprint>
